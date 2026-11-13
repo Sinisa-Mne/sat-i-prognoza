@@ -27,6 +27,10 @@ tekst u stranici i komentari su na tom jeziku.
   `/title?url=...`, pomoćnik pročita `og:title` sa stranice vijesti (ista ograničenja kao `/open`) i pamti ga;
   stranica ih čuva u localStorage (`vijesti-naslovi`). Naslov ima do 4 reda, pa `line-height` vijesti mora
   ostati dovoljno mali da 4 reda stanu u red (`NEWS.perPage` vijesti po visini kartice).
+- Otpornost: svi zahtjevi idu kroz `fetchT` (rok `CONFIG.timeoutSec`), a sljedeći otkucaj sata i sljedeće
+  osvježavanje prognoze i vijesti zakazuju se prije prikaza, da zaglavljen zahtjev ili greška u prikazu ne
+  zaustave sat ni osvježavanje. Mjesta za vijesti (`perPage * pages`) dijele se u krugovima po uključenim
+  izvorima (najnovija iz svakog, pa druga, ...), pa nijedan izvor ne potisne ostale.
 - Praznici: državni CG su 2 dana (3 ako prvi pada vikendom); Uskrs po gregorijanskom, Vaskrs po julijanskom
   računu; bajrami i jevrejski praznici preko `Intl` kalendara (`islamic-umalqura`, `hebrew`).
 - Ikonice: Meteocons (MIT) u `icons/meteocons/{anim,static}`. Animirana može biti samo velika ikonica

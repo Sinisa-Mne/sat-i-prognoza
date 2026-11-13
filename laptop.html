@@ -203,6 +203,7 @@ const CONFIG = {
   place: "Herceg Novi", lat: 42.4531, lon: 18.5375,
   refreshMin: 15,   // koliko često se prognoza osvježava
   retryMin: 2,      // kad nema interneta, ponovni pokušaj nakon ovoliko minuta
+  timeoutSec: 20,   // najduže čekanje na odgovor; zaglavljen zahtjev ne smije zaustaviti osvježavanje
   hours: 6,         // koliko kolona "po satima"
   hourStep: 1,      // razmak između kolona u satima (3 = svaka 3 sata)
   days: 4,          // danas + naredna 3 dana
@@ -217,9 +218,8 @@ const NEWS = {
     { name: "Reddit", url: "http://127.0.0.1:8765/feed/reddit-worldnews" },   // r/worldnews
     { name: "Slashdot", url: "http://127.0.0.1:8765/feed/slashdot" },
   ],
-  perSource: 8,     // najviše ovoliko najnovijih po izvoru, da jedan izvor ne potisne ostale
   perPage: 2,       // vijesti odjednom na ekranu
-  pages: 6,         // koliko strana se smjenjuje (ukupno perPage * pages najnovijih)
+  pages: 6,         // koliko strana se smjenjuje (ukupno perPage * pages vijesti, podjednako iz uključenih izvora)
   rotateSec: 20,    // smjena strane
   refreshMin: 15,
   // Klik na vijest: pomoćnik je otvori u Firefoxu (nova kartica). Ako pomoćnik ne radi, otvara je Edge.
@@ -264,6 +264,8 @@ const DAYS_SHORT = ["Ned", "Pon", "Uto", "Sri", "Čet", "Pet", "Sub"];
 const MONTHS = ["januar", "februar", "mart", "april", "maj", "jun", "jul", "avgust", "septembar", "oktobar", "novembar", "decembar"];
 const $ = id => document.getElementById(id);
 const pad = n => String(n).padStart(2, "0");
+// fetch sa rokom (CONFIG.timeoutSec): bez njega bi zahtjev koji nikad ne završi zauvijek odložio sljedeće osvježavanje.
+const fetchT = (u, opt = {}) => fetch(u, { ...opt, signal: AbortSignal.timeout(CONFIG.timeoutSec * 1000) });
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 const deg = x => x == null ? "–" : Math.round(x) + "°";
 const hm = iso => iso.slice(11, 16);  // "2026-11-13T07:02" -> "07:02"
@@ -384,6 +386,7 @@ const turn = (id, deg) => $(id).setAttribute("transform", `rotate(${deg.toFixed(
 
 let shownDay = "";
 function tick() {
+  setTimeout(tick, 1000 - Date.now() % 1000 + 5);  // prvo sljedeći otkucaj: greška u prikazu ispod ne smije zaustaviti sat
   const d = new Date();
   const h = d.getHours(), m = d.getMinutes(), sec = d.getSeconds();
   turn("hh", (h % 12 + m / 60) * 30);
@@ -394,7 +397,6 @@ function tick() {
     renderCalendar(d);
   }
   if (d.getSeconds() === 0) renderWeather();  // pomjeri prognozu po satima i status
-  setTimeout(tick, 1000 - Date.now() % 1000 + 5);
 }
 
 // ---- Ikonice: Meteocons (Bas Milius, MIT licenca), u icons/meteocons ----
@@ -481,7 +483,7 @@ function url() {
 async function load() {
   const asked = cacheKey();
   try {
-    const r = await fetch(url(), { cache: "no-store" });
+    const r = await fetchT(url(), { cache: "no-store" });
     if (!r.ok) throw new Error("HTTP " + r.status);
     const j = await r.json();
     if (!j.current || !j.hourly || !j.daily) throw new Error("neočekivan odgovor");
@@ -493,9 +495,9 @@ async function load() {
     console.warn("prognoza:", e);
     online = false;
   }
-  renderWeather();
-  clearTimeout(timer);
+  clearTimeout(timer);  // sljedeće osvježavanje se zakazuje prije prikaza, da ga greška u prikazu ne prekine
   timer = setTimeout(load, (online ? CONFIG.refreshMin : CONFIG.retryMin) * 60000);
+  renderWeather();
 }
 
 // ---- Izbor mjesta ----
@@ -519,7 +521,7 @@ function closePicker() { $("picker").hidden = true; searchSeq++; clearTimeout(se
 async function search(text) {  // Open-Meteo geokodiranje: ime -> koordinate
   const seq = ++searchSeq;
   try {
-    const r = await fetch("https://geocoding-api.open-meteo.com/v1/search?count=8&language=hr&format=json&name=" + encodeURIComponent(text));
+    const r = await fetchT("https://geocoding-api.open-meteo.com/v1/search?count=8&language=hr&format=json&name=" + encodeURIComponent(text));
     if (!r.ok) throw new Error("HTTP " + r.status);
     const j = await r.json();
     if (seq !== searchSeq) return;
@@ -666,7 +668,7 @@ async function fillTitles(seq) {
   const todo = news.filter(n => shortened(n.title) && !fullTitles[n.link]);
   if (!todo.length) return;
   await Promise.allSettled(todo.map(async n => {
-    const r = await fetch(NEWS.titler + encodeURIComponent(n.link));
+    const r = await fetchT(NEWS.titler + encodeURIComponent(n.link));
     if (!r.ok) throw new Error("HTTP " + r.status);
     const t = (await r.text()).trim();
     if (t) fullTitles[n.link] = t;
@@ -682,7 +684,7 @@ async function fillTitles(seq) {
 }
 
 async function loadSource(src) {
-  const r = await fetch(src.url, { cache: "no-store" });
+  const r = await fetchT(src.url, { cache: "no-store" });
   if (!r.ok) throw new Error("HTTP " + r.status);
   const x = new DOMParser().parseFromString(await r.text(), "text/xml");
   // RSS (item, link kao tekst, pubDate; kod RSS 1.0 kao na Slashdotu dc:date) ili Atom kao kod Reddita
@@ -697,7 +699,7 @@ async function loadSource(src) {
     };
   }).filter(i => i.title.trim() && i.link.startsWith("http"));
   if (!items.length) throw new Error("prazan feed");
-  return items.sort((a, b) => b.date - a.date).slice(0, NEWS.perSource);
+  return items.sort((a, b) => b.date - a.date);
 }
 
 async function loadNews() {
@@ -708,20 +710,29 @@ async function loadNews() {
   if (seq !== newsSeq) return;   // izbor izvora je u međuvremenu promijenjen
   const old = {};
   for (const n of news) (old[n.src] = old[n.src] || []).push(n);
-  let all = [], failed = 0;
-  res.forEach((r, i) => {
-    if (r.status === "fulfilled") all.push(...r.value);
-    else { failed++; console.warn("vijesti " + sources[i].name + ":", r.reason); all.push(...(old[sources[i].name] || [])); }
+  let failed = 0;
+  const lists = res.map((r, i) => {
+    if (r.status === "fulfilled") return r.value;
+    failed++; console.warn("vijesti " + sources[i].name + ":", r.reason);
+    return old[sources[i].name] || [];   // izvor trenutno ne radi: ostaju njegove zadnje vijesti
   });
+  // Mjesta se dijele u krugovima: najnovija iz svakog izvora, pa druga po redu, ... Tako izvor koji
+  // najčešće objavljuje ne potisne ostale, a svaki uključen izvor se vidi.
+  const total = NEWS.perPage * NEWS.pages, all = [];
+  for (let k = 0; all.length < total; k++) {
+    const round = lists.map(l => l[k]).filter(Boolean).sort((a, b) => b.date - a.date);
+    if (!round.length) break;
+    all.push(...round.slice(0, total - all.length));
+  }
   if (all.length) {
-    news = all.sort((a, b) => b.date - a.date).slice(0, NEWS.perPage * NEWS.pages);
+    news = all.sort((a, b) => b.date - a.date);
     applyTitles();
     try { localStorage.setItem("vijesti", JSON.stringify(news)); } catch (e) {}
   }
+  newsTimer = setTimeout(loadNews, (failed ? CONFIG.retryMin : NEWS.refreshMin) * 60000);  // prije prikaza, kao kod prognoze
   newsPage = 0;
   renderNews();
   fillTitles(seq);
-  newsTimer = setTimeout(loadNews, (failed ? CONFIG.retryMin : NEWS.refreshMin) * 60000);
 }
 
 function renderNews() {
@@ -742,7 +753,7 @@ $("news").addEventListener("click", e => {
   const a = e.target.closest("a");
   if (!a) return;
   e.preventDefault();
-  fetch(NEWS.opener + encodeURIComponent(a.href))
+  fetchT(NEWS.opener + encodeURIComponent(a.href))
     .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); })
     .catch(err => { console.warn("otvaranje vijesti:", err); window.open(a.href, "_blank", "noopener"); });
 });
