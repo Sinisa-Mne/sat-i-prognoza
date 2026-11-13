@@ -31,6 +31,8 @@ tekst u stranici i komentari su na tom jeziku.
   osvježavanje prognoze i vijesti zakazuju se prije prikaza, da zaglavljen zahtjev ili greška u prikazu ne
   zaustave sat ni osvježavanje. Mjesta za vijesti (`perPage * pages`) dijele se u krugovima po uključenim
   izvorima (najnovija iz svakog, pa druga, ...), pa nijedan izvor ne potisne ostale.
+- Ekran i sleep: stranica ne drži ekran budnim (`CONFIG.keepAwake: false`), pa gašenje ekrana i sleep idu po
+  podešavanjima Cinnamona (Power Management, Screensaver). Uz `true` Edge traži "Blink Wake Lock" i ekran se ne gasi.
 - Praznici: državni CG su 2 dana (3 ako prvi pada vikendom); Uskrs po gregorijanskom, Vaskrs po julijanskom
   računu; bajrami i jevrejski praznici preko `Intl` kalendara (`islamic-umalqura`, `hebrew`).
 - Ikonice: Meteocons (MIT) u `icons/meteocons/{anim,static}`. Animirana može biti samo velika ikonica

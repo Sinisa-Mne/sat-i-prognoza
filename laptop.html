@@ -208,6 +208,7 @@ const CONFIG = {
   hourStep: 1,      // razmak između kolona u satima (3 = svaka 3 sata)
   days: 4,          // danas + naredna 3 dana
   animate: false,   // animirana velika ikonica vremena; na starijem laptopu troši oko 20% procesora
+  keepAwake: false, // true: stranica drži ekran budnim; false: gašenje ekrana i sleep idu po podešavanjima sistema
 };
 const NEWS = {
   // Izvori. "direct" = stranica čita sama; ostali idu preko news_proxy.py na ovom računaru.
@@ -758,10 +759,10 @@ $("news").addEventListener("click", e => {
     .catch(err => { console.warn("otvaranje vijesti:", err); window.open(a.href, "_blank", "noopener"); });
 });
 
-// ---- Ekran da se ne gasi dok je stranica otvorena ----
+// ---- Ekran da se ne gasi dok je stranica otvorena (samo uz CONFIG.keepAwake) ----
 let lock = null;
 async function keepAwake() {
-  if (!("wakeLock" in navigator) || document.visibilityState !== "visible" || lock) return;
+  if (!CONFIG.keepAwake || !("wakeLock" in navigator) || document.visibilityState !== "visible" || lock) return;
   try { lock = await navigator.wakeLock.request("screen"); lock.addEventListener("release", () => { lock = null; }); }
   catch (e) { console.warn("wake lock:", e); }
 }
