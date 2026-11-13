@@ -11,8 +11,9 @@
     Mint:     microsoft-edge --app=file:///home/<korisnik>/laptop.html
   Drugo mjesto: klik na ime mjesta gore desno (lista ili pretraga), ili u adresi ?place=Sarajevo&lat=43.856&lon=18.413
   Model prognoze: klik na Auto / ECMWF / ICON-EU gore desno, ili u adresi ?model=icon_eu
-  Vijesti: vijesti.me direktno; BBC preko pomoćnika news_proxy.py (mora raditi u pozadini).
-  Klik na vijest je otvara.
+  Vijesti: vijesti.me direktno; BBC, Reddit i Slashdot preko pomoćnika news_proxy.py (mora raditi u pozadini).
+  Izvori se uključuju i isključuju dugmadima iznad vijesti.
+  Klik na vijest je otvara u Firefoxu, u novoj kartici (preko pomoćnika; bez njega u Edge prozoru).
   Dvoklik bilo gdje: preko cijelog ekrana (i nazad).
 -->
 <style>
@@ -29,14 +30,14 @@ body {
   font-family: "Segoe UI", "Noto Sans", Ubuntu, "DejaVu Sans", sans-serif;
   font-variant-numeric: tabular-nums; user-select: none;
 }
-main { display: grid; grid-template-columns: 43fr 57fr; gap: 1.25rem; height: 100vh; padding: 1.25rem; }
+main { display: grid; grid-template-columns: 45fr 55fr; gap: 1.25rem; height: 100vh; padding: 1.25rem; }
 .col { display: flex; flex-direction: column; gap: 1.25rem; min-height: 0; }
 .card { background: var(--panel); border-radius: 1rem; padding: .95rem 1.4rem; min-height: 0; }
 .dim { color: var(--dim); }
 .label { font-size: 1.05rem; color: var(--dim); letter-spacing: .04em; text-transform: uppercase; }
 
-/* Sat */
-.clock { flex: none; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 2rem; padding-top: .8rem; padding-bottom: .8rem; }
+/* Sat, a pored njega trenutno vrijeme */
+.clock { flex: none; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 1.5rem; padding-top: .8rem; padding-bottom: .8rem; }
 #analog { width: 17rem; height: 17rem; display: block; }
 #analog .face { fill: #12161c; stroke: var(--line); stroke-width: 2; }
 #analog .maj { stroke: var(--fg); stroke-width: 3.5; stroke-linecap: round; }
@@ -46,22 +47,18 @@ main { display: grid; grid-template-columns: 43fr 57fr; gap: 1.25rem; height: 10
 #analog .mh { stroke: var(--fg); stroke-width: 4.5; stroke-linecap: round; }
 #analog .sh { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; }
 #analog .pin { fill: var(--accent); }
-#dayname { font-size: 3rem; font-weight: 300; line-height: 1.1; }
-#date { font-size: 1.9rem; margin-top: .3rem; }
-#week { font-size: 1.15rem; color: var(--dim); margin-top: .4rem; }
-#today-hol { font-size: 1.3rem; color: var(--hol); font-weight: 600; margin-top: .8rem; }
-#today-hol.rel { color: var(--rel); font-weight: 400; }
 
 /* Kalendar */
 .calendar { flex: 1; display: flex; flex-direction: column; }
 #cal-title { font-size: 1.6rem; margin-bottom: .5rem; }
+#cal-title small { font-size: 1.1rem; color: var(--dim); }
 #cal { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: auto repeat(6, 1fr); }
 #cal > div { display: flex; align-items: center; justify-content: center; font-size: 1.45rem; position: relative; }
 #cal span {
   width: 2.5rem; height: 2.5rem; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   border: 2px solid transparent;
 }
-#cal .wd { font-size: 1rem; color: var(--dim); text-transform: uppercase; padding-bottom: .3rem; }
+#cal .wd { font-size: 1rem; color: #d8dde6; text-transform: uppercase; padding-bottom: .3rem; }
 #cal .wd.we { color: var(--we); font-weight: 600; background: none; }
 /* vikend: jača boja i blago obojena kolona */
 #cal .we { color: var(--we); font-weight: 600; background: rgba(255, 154, 139, .07); }
@@ -82,21 +79,12 @@ main { display: grid; grid-template-columns: 43fr 57fr; gap: 1.25rem; height: 10
 #hol-list .r { color: var(--rel); }
 
 /* Trenutno vrijeme */
-.now { flex: none; }
-.now-head { display: flex; align-items: center; gap: 1rem; }
-#status { margin-left: auto; }
-#models { display: flex; gap: .3rem; }
-#models button {
-  font: inherit; font-size: .95rem; color: var(--dim); background: none; cursor: pointer;
-  border: 1px solid var(--line); border-radius: 1rem; padding: .1rem .7rem;
-}
-#models button.on { color: #15181d; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+.now { position: relative; min-width: 0; }
 #place { font-size: 1.5rem; font-weight: 600; cursor: pointer; }
 #place::after { content: " ▾"; font-size: .9rem; color: var(--dim); }
 #place:hover { color: var(--accent); }
-.now { position: relative; }
 #picker {
-  position: absolute; z-index: 5; top: 3.2rem; left: 1rem; width: 26rem;
+  position: absolute; z-index: 5; top: 2.4rem; right: 0; width: 26rem;
   background: var(--panel); border: 1px solid var(--line); border-radius: .8rem;
   padding: .8rem; box-shadow: 0 1rem 2.5rem rgba(0,0,0,.55);
 }
@@ -112,56 +100,64 @@ main { display: grid; grid-template-columns: 43fr 57fr; gap: 1.25rem; height: 10
 #picker .list div.on { color: var(--accent); font-weight: 600; }
 #picker .list small { color: var(--dim); margin-left: .4rem; }
 #picker .list div.hint { color: var(--dim); font-size: .95rem; cursor: default; background: none; }
-#status { font-size: 1.05rem; color: var(--dim); }
-#status.stale { color: var(--accent); }
-.now-body { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 1.2rem; margin-top: .4rem; }
-.now-body .ico { width: 8.5rem; height: 8.5rem; margin: -.8rem -.4rem -.8rem -.6rem; }
-#temp { font-size: 6rem; font-weight: 300; line-height: 1; }
-#cond { font-size: 1.5rem; margin-top: .3rem; }
-.facts { justify-self: end; text-align: right; font-size: 1.2rem; line-height: 1.55; }
+.now-main { display: flex; align-items: center; gap: .5rem; }
+.now-main .ico { width: 6.5rem; height: 6.5rem; margin: -.5rem -.2rem -.6rem -.7rem; }
+#temp { font-size: 5rem; font-weight: 300; line-height: 1; }
+#cond { font-size: 1.45rem; }
+.facts { font-size: 1.15rem; line-height: 1.5; margin-top: .5rem; }
 .facts b { font-weight: 600; }
 
-/* Po satima */
+/* Po satima; u zaglavlju su izbor modela i vrijeme zadnjeg osvježavanja */
 .hours { flex: none; }
-#hours { display: grid; grid-template-columns: repeat(12, 1fr); margin-top: .35rem; text-align: center; }
+.hours-head { display: flex; align-items: center; gap: 1rem; }
+#models { display: flex; gap: .3rem; margin-left: auto; }
+#models button, #news-src button {
+  font: inherit; font-size: .95rem; color: var(--dim); background: none; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 1rem; padding: .1rem .7rem;
+}
+#models button.on, #news-src button.on { color: #15181d; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+#status { font-size: 1.05rem; color: var(--dim); }
+#status.stale { color: var(--accent); }
+#hours { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; margin-top: .35rem; text-align: center; }
 #hours > div { display: flex; flex-direction: column; align-items: center; gap: .05rem; }
 #hours > div + div { border-left: 1px solid var(--line); }
-#hours .h { font-size: 1.1rem; color: var(--dim); }
-#hours .ico { width: 3.1rem; height: 3.1rem; margin: -.25rem 0; }
-#hours .t { font-size: 1.6rem; }
-#hours .p { font-size: 1rem; color: var(--dim); }
+#hours .h { font-size: 1.15rem; color: var(--dim); }
+#hours .ico { width: 3.4rem; height: 3.4rem; margin: -.25rem 0; }
+#hours .t { font-size: 1.7rem; }
+#hours .p { font-size: 1.05rem; color: var(--dim); }
 .wet { color: var(--rain) !important; }
 
-/* Donji red: dani lijevo, vijesti desno */
-.bottom { flex: 1; display: grid; grid-template-columns: 1fr 1.1fr; gap: 1.25rem; min-height: 0; }
-
-/* Danas i naredna 3 dana */
-.days { display: flex; flex-direction: column; }
-#days { flex: 1; display: grid; grid-auto-rows: minmax(0, 1fr); margin-top: .3rem; }
+/* Danas i naredni dani, vodoravno */
+.days { flex: none; }
+#days { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; margin-top: .35rem; text-align: center; }
 #days > div {
-  display: grid; grid-template-columns: 4.9rem 3.2rem 1fr auto; align-items: center; gap: .6rem;
-  font-size: 1.35rem;
+  display: grid; grid-template-areas: "n n" "i t" "r r"; grid-template-columns: auto auto;
+  justify-content: center; align-items: center; column-gap: .5rem;
 }
-#days > div + div { border-top: 1px solid var(--line); }
-#days .ico { width: 3.2rem; height: 3.2rem; }
-#days .tmp { white-space: nowrap; }
+#days > div + div { border-left: 1px solid var(--line); }
+#days .n { grid-area: n; font-size: 1.15rem; color: var(--dim); }
+#days .n.today { color: var(--fg); font-weight: 600; }
+#days .ico { grid-area: i; width: 3.4rem; height: 3.4rem; margin: -.25rem 0; }
+#days .tmp { grid-area: t; white-space: nowrap; font-size: 1.5rem; }
 #days .tmp b { font-weight: 600; }
-#days .tmp span { color: var(--dim); font-size: 1.15rem; }
-#days .r { font-size: 1.05rem; color: var(--dim); text-align: right; line-height: 1.25; }
+#days .tmp span { color: var(--dim); font-size: 1.2rem; }
+#days .r { grid-area: r; font-size: 1.05rem; color: var(--dim); }
 
-/* Vijesti */
-.news { display: flex; flex-direction: column; }
-.news .label { display: flex; justify-content: space-between; align-items: center; }
+/* Vijesti: ostatak desne strane */
+.news { flex: 1; display: flex; flex-direction: column; }
+.news-head { display: flex; align-items: center; gap: 1rem; }
+#news-src { display: flex; gap: .3rem; }
+#news-dots { margin-left: auto; }
 #news-dots span { display: inline-block; width: .45rem; height: .45rem; border-radius: 50%; background: var(--line); margin-left: .3rem; }
 #news-dots span.on { background: var(--accent); }
-#news { flex: 1; display: grid; grid-template-rows: repeat(4, minmax(0, 1fr)); margin-top: .3rem; }
+#news { flex: 1; display: grid; margin-top: .3rem; min-height: 0; }  /* broj redova zadaje renderNews (NEWS.perPage) */
 #news a {
-  color: var(--fg); text-decoration: none; font-size: 1.12rem; line-height: 1.3;
+  color: var(--fg); text-decoration: none; font-size: 1.9rem; line-height: 1.13;   /* 4 reda stanu u red od dvije vijesti */
   display: flex; align-items: center; min-height: 0;
 }
 #news a + a { border-top: 1px solid var(--line); }
-#news a > div { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-#news .meta { color: var(--accent); font-size: .95rem; margin-right: .4rem; }
+#news a > div { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+#news .meta { color: var(--accent); font-size: 1.4rem; margin-right: .4rem; }
 #news a:hover { color: #fff; }
 .msg { font-size: 1.3rem; color: var(--dim); padding: 1rem 0; }
 
@@ -174,11 +170,10 @@ main { display: grid; grid-template-columns: 43fr 57fr; gap: 1.25rem; height: 10
   <div class="col">
     <section class="card clock">
       <svg id="analog" viewBox="0 0 200 200"></svg>
-      <div>
-        <div id="dayname"></div>
-        <div id="date"></div>
-        <div id="week"></div>
-        <div id="today-hol"></div>
+      <div class="now">
+        <span id="place" title="Promijeni mjesto"></span>
+        <div id="picker" hidden><input id="pick-q" placeholder="Upiši grad…" autocomplete="off" spellcheck="false"><div class="list" id="pick-list"></div></div>
+        <div id="now"><div class="msg">Prognoza se učitava…</div></div>
       </div>
     </section>
     <section class="card calendar">
@@ -188,25 +183,18 @@ main { display: grid; grid-template-columns: 43fr 57fr; gap: 1.25rem; height: 10
     </section>
   </div>
   <div class="col">
-    <section class="card now">
-      <div class="now-head"><span id="place" title="Promijeni mjesto"></span><span id="models"></span><span id="status"></span></div>
-      <div id="picker" hidden><input id="pick-q" placeholder="Upiši grad…" autocomplete="off" spellcheck="false"><div class="list" id="pick-list"></div></div>
-      <div class="now-body" id="now"><div class="msg">Prognoza se učitava…</div></div>
-    </section>
     <section class="card hours">
-      <div class="label">Narednih 12 sati</div>
+      <div class="hours-head"><span class="label" id="hours-label"></span><span id="models"></span><span id="status"></span></div>
       <div id="hours"></div>
     </section>
-    <div class="bottom">
-      <section class="card days">
-        <div class="label" id="days-label">Danas i naredna 3 dana</div>
-        <div id="days"></div>
-      </section>
-      <section class="card news">
-        <div class="label"><span>Vijesti · vijesti.me · BBC</span><span id="news-dots"></span></div>
-        <div id="news"><div class="msg">Vijesti se učitavaju…</div></div>
-      </section>
-    </div>
+    <section class="card days">
+      <div class="label" id="days-label"></div>
+      <div id="days"></div>
+    </section>
+    <section class="card news">
+      <div class="news-head"><span class="label">Vijesti</span><span id="news-src" title="Uključi ili isključi izvor"></span><span id="news-dots"></span></div>
+      <div id="news"><div class="msg">Vijesti se učitavaju…</div></div>
+    </section>
   </div>
 </main>
 <script>
@@ -215,9 +203,10 @@ const CONFIG = {
   place: "Herceg Novi", lat: 42.4531, lon: 18.5375,
   refreshMin: 15,   // koliko često se prognoza osvježava
   retryMin: 2,      // kad nema interneta, ponovni pokušaj nakon ovoliko minuta
-  hours: 12,        // koliko kolona "po satima" (uz to promijeni repeat(12, ...) u CSS-u i naslov)
+  hours: 6,         // koliko kolona "po satima"
   hourStep: 1,      // razmak između kolona u satima (3 = svaka 3 sata)
   days: 4,          // danas + naredna 3 dana
+  animate: false,   // animirana velika ikonica vremena; na starijem laptopu troši oko 20% procesora
 };
 const NEWS = {
   // Izvori. "direct" = stranica čita sama; ostali idu preko news_proxy.py na ovom računaru.
@@ -225,12 +214,18 @@ const NEWS = {
     { name: "Vijesti", url: "https://www.vijesti.me/rss" },
     { name: "BBC", url: "http://127.0.0.1:8765/feed/bbc-sr" },
     { name: "BBC World", url: "http://127.0.0.1:8765/feed/bbc-world" },
+    { name: "Reddit", url: "http://127.0.0.1:8765/feed/reddit-worldnews" },   // r/worldnews
+    { name: "Slashdot", url: "http://127.0.0.1:8765/feed/slashdot" },
   ],
   perSource: 8,     // najviše ovoliko najnovijih po izvoru, da jedan izvor ne potisne ostale
-  perPage: 4,       // vijesti odjednom na ekranu
-  pages: 4,         // koliko strana se smjenjuje (ukupno perPage * pages najnovijih)
+  perPage: 2,       // vijesti odjednom na ekranu
+  pages: 6,         // koliko strana se smjenjuje (ukupno perPage * pages najnovijih)
   rotateSec: 20,    // smjena strane
   refreshMin: 15,
+  // Klik na vijest: pomoćnik je otvori u Firefoxu (nova kartica). Ako pomoćnik ne radi, otvara je Edge.
+  opener: "http://127.0.0.1:8765/open?url=",
+  // vijesti.me u RSS-u skraćuje naslove ("..."); cijeli naslov pomoćnik pročita sa stranice vijesti.
+  titler: "http://127.0.0.1:8765/title?url=",
 };
 // Ponuđena mjesta u izboru (klik na ime mjesta). Pretragom nađena mjesta se dodaju na vrh liste.
 const PLACES = [
@@ -265,7 +260,6 @@ const MODELS = [
 const known = id => MODELS.some(m => m.id === id);
 let model = known(q.get("model")) ? q.get("model") : known(localStorage.getItem("model")) ? localStorage.getItem("model") : "best_match";
 
-const DAYS = ["nedjelja", "ponedjeljak", "utorak", "srijeda", "četvrtak", "petak", "subota"];
 const DAYS_SHORT = ["Ned", "Pon", "Uto", "Sri", "Čet", "Pet", "Sub"];
 const MONTHS = ["januar", "februar", "mart", "april", "maj", "jun", "jul", "avgust", "septembar", "oktobar", "novembar", "decembar"];
 const $ = id => document.getElementById(id);
@@ -344,7 +338,7 @@ function isoWeek(d) {
 
 function renderCalendar(d) {
   const y = d.getFullYear(), m = d.getMonth();
-  $("cal-title").textContent = cap(MONTHS[m]) + " " + y;
+  $("cal-title").innerHTML = cap(MONTHS[m]) + " " + y + ` <small>· sedmica ${isoWeek(d)}</small>`;
   const offset = (new Date(y, m, 1).getDay() + 6) % 7;  // ponedjeljak prvi
   let h = ["Pon", "Uto", "Sri", "Čet", "Pet", "Sub", "Ned"]
     .map((n, i) => `<div class="wd${i > 4 ? " we" : ""}">${n}</div>`).join("");
@@ -397,12 +391,6 @@ function tick() {
   turn("sh", sec * 6);
   if (d.toDateString() !== shownDay) {  // pri pokretanju i u ponoć
     shownDay = d.toDateString();
-    $("dayname").textContent = cap(DAYS[d.getDay()]);
-    $("date").textContent = d.getDate() + ". " + MONTHS[d.getMonth()];
-    $("week").textContent = d.getFullYear() + ". · sedmica " + isoWeek(d);
-    const th = holidaysOn(d);
-    $("today-hol").textContent = th.map(x => x.name).join(" · ");
-    $("today-hol").className = th.some(x => x.state) ? "" : "rel";
     renderCalendar(d);
   }
   if (d.getSeconds() === 0) renderWeather();  // pomjeri prognozu po satima i status
@@ -410,8 +398,8 @@ function tick() {
 }
 
 // ---- Ikonice: Meteocons (Bas Milius, MIT licenca), u icons/meteocons ----
-// Velika ikonica za trenutno vrijeme je animirana; male (po satima, po danima) su statične,
-// da laptop ne crta 17 animacija odjednom.
+// Velika ikonica za trenutno vrijeme može biti animirana (CONFIG.animate); male (po satima, po danima)
+// su uvijek statične. Animacija tjera preglednik da crta bez prestanka, pa je podrazumijevano ugašena.
 function iconName(c, day) {
   const dn = day ? "day" : "night";
   if (c == null) return "not-available";
@@ -433,7 +421,7 @@ function iconName(c, day) {
   return "not-available";
 }
 function icon(code, day, animated) {
-  return `<img class="ico" src="icons/meteocons/${animated ? "anim" : "static"}/${iconName(code, day)}.svg" alt="">`;
+  return `<img class="ico" src="icons/meteocons/${animated && CONFIG.animate ? "anim" : "static"}/${iconName(code, day)}.svg" alt="">`;
 }
 
 function cond(c) {
@@ -580,12 +568,6 @@ $("pick-q").addEventListener("keydown", e => {
 });
 document.addEventListener("click", () => { if (!$("picker").hidden) closePicker(); });
 
-function rainText(p, mm) {
-  const pct = p == null ? "–" : p + "%";
-  if (mm == null || mm < 0.1) return pct;
-  return pct + " · " + (mm < 1 ? "<1" : Math.round(mm)) + " mm";
-}
-
 function renderWeather() {
   $("place").textContent = CONFIG.place;
   if (!wx) {
@@ -603,13 +585,11 @@ function renderWeather() {
   const D = wx.daily, H = wx.hourly, C = wx.current;
   const ti = D.time.indexOf(locNow.slice(0, 10));
 
-  // Sada
-  let facts = `Osjećaj <b>${deg(C.apparent_temperature)}</b><br>Vlažnost <b>${C.relative_humidity_2m}%</b> · Vjetar <b>${Math.round(C.wind_speed_10m)} km/h</b>`;
-  if (ti >= 0) facts = `Danas <b>${deg(D.temperature_2m_max[ti])} / ${deg(D.temperature_2m_min[ti])}</b> · Kiša <b>${rainText(D.precipitation_probability_max[ti], D.precipitation_sum[ti])}</b><br>` +
-    facts + `<br><span class="dim">Izlazak ${hm(D.sunrise[ti])} · Zalazak ${hm(D.sunset[ti])}</span>`;
-  $("now").innerHTML = icon(C.weather_code, C.is_day, true) +
-    `<div><div id="temp">${deg(C.temperature_2m)}</div><div id="cond">${cond(C.weather_code)}</div></div>` +
-    `<div class="facts">${facts}</div>`;
+  // Sada (pored sata); dnevni max / min i kiša su u prvoj koloni prognoze po danima
+  let facts = `Osjećaj <b>${deg(C.apparent_temperature)}</b><br>Vlažnost <b>${C.relative_humidity_2m}%</b><br>Vjetar <b>${Math.round(C.wind_speed_10m)} km/h</b>`;
+  if (ti >= 0) facts += `<br><span class="dim">Sunce ${hm(D.sunrise[ti])} – ${hm(D.sunset[ti])}</span>`;
+  $("now").innerHTML = `<div class="now-main">${icon(C.weather_code, C.is_day, true)}<div id="temp">${deg(C.temperature_2m)}</div></div>` +
+    `<div id="cond">${cond(C.weather_code)}</div><div class="facts">${facts}</div>`;
 
   // Po satima: CONFIG.hours kolona, svakih CONFIG.hourStep sati
   let start = H.time.findIndex(t => t > locNow), h = "";
@@ -630,8 +610,8 @@ function renderWeather() {
   $("days").innerHTML = idx.map((i, k) => {
     const dt = new Date(D.time[i] + "T12:00"), p = D.precipitation_probability_max[i], mm = D.precipitation_sum[i];
     const name = k === 0 ? "Danas" : k === 1 ? "Sutra" : DAYS_SHORT[dt.getDay()] + " " + dt.getDate() + ".";
-    const amount = mm == null || mm < 0.1 ? "" : "<br>" + (mm < 1 ? "<1" : Math.round(mm)) + " mm";
-    return `<div><span${k === 0 ? ' style="font-weight:600"' : ""}>${name}</span>${icon(D.weather_code[i], 1)}` +
+    const amount = mm == null || mm < 0.1 ? "" : " · " + (mm < 1 ? "<1" : Math.round(mm)) + " mm";
+    return `<div><span class="n${k === 0 ? " today" : ""}">${name}</span>${icon(D.weather_code[i], 1)}` +
       `<span class="tmp"><b>${deg(D.temperature_2m_max[i])}</b> <span>/ ${deg(D.temperature_2m_min[i])}</span></span>` +
       `<span class="r${p >= 30 ? " wet" : ""}">${p == null ? "–" : p + "%"}${amount}</span></div>`;
   }).join("");
@@ -649,40 +629,99 @@ function section(link) {  // rubrika iz linka: /vijesti/crna-hronika/... -> "Hro
     return a === "vijesti" ? SECTIONS[b] || "Vijesti" : SECTIONS[a] || cap(a || "");
   } catch (e) { return ""; }
 }
-let news = [], newsPage = 0;
+let news = [], newsPage = 0, newsTimer = 0, newsSeq = 0;
 try { news = JSON.parse(localStorage.getItem("vijesti")) || []; } catch (e) {}
+
+// Izbor izvora: dugmad u zaglavlju. Pamte se isključeni, pa je novododat izvor odmah uključen.
+let newsOff = [];
+try { newsOff = (JSON.parse(localStorage.getItem("vijesti-iskljuceni")) || []).filter(n => NEWS.sources.some(s => s.name === n)); } catch (e) {}
+if (newsOff.length >= NEWS.sources.length) newsOff = [];
+const activeSources = () => NEWS.sources.filter(s => !newsOff.includes(s.name));
+function renderSources() {
+  $("news-src").innerHTML = NEWS.sources.map((s, i) => `<button data-i="${i}"${newsOff.includes(s.name) ? "" : ' class="on"'}>${esc(s.name)}</button>`).join("");
+}
+$("news-src").addEventListener("click", e => {
+  const s = NEWS.sources[e.target.dataset.i];
+  if (!s) return;
+  if (newsOff.includes(s.name)) newsOff = newsOff.filter(n => n !== s.name);
+  else if (activeSources().length > 1) newsOff.push(s.name);   // bar jedan izvor ostaje
+  else return;
+  try { localStorage.setItem("vijesti-iskljuceni", JSON.stringify(newsOff)); } catch (err) {}
+  renderSources();
+  news = news.filter(n => !newsOff.includes(n.src));   // odmah skloni isključene, pa učitaj ponovo
+  newsPage = 0;
+  renderNews();
+  loadNews();
+});
+$("news-src").addEventListener("dblclick", e => e.stopPropagation());
+
+// Cijeli naslovi za vijesti kojima ga je izvor skratio: { adresa: naslov }, pamti se da se ne traži ponovo.
+let fullTitles = {};
+try { fullTitles = JSON.parse(localStorage.getItem("vijesti-naslovi")) || {}; } catch (e) {}
+const shortened = t => /(\.\.\.|…)\s*$/.test(t);
+function applyTitles() {
+  for (const n of news) if (fullTitles[n.link]) n.title = fullTitles[n.link];
+}
+async function fillTitles(seq) {
+  const todo = news.filter(n => shortened(n.title) && !fullTitles[n.link]);
+  if (!todo.length) return;
+  await Promise.allSettled(todo.map(async n => {
+    const r = await fetch(NEWS.titler + encodeURIComponent(n.link));
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const t = (await r.text()).trim();
+    if (t) fullTitles[n.link] = t;
+  }));
+  if (seq !== newsSeq) return;   // u međuvremenu je učitana nova lista
+  for (const k of Object.keys(fullTitles)) if (!news.some(n => n.link === k)) delete fullTitles[k];
+  applyTitles();
+  try {
+    localStorage.setItem("vijesti-naslovi", JSON.stringify(fullTitles));
+    localStorage.setItem("vijesti", JSON.stringify(news));
+  } catch (e) {}
+  renderNews();
+}
 
 async function loadSource(src) {
   const r = await fetch(src.url, { cache: "no-store" });
   if (!r.ok) throw new Error("HTTP " + r.status);
   const x = new DOMParser().parseFromString(await r.text(), "text/xml");
-  const items = [...x.querySelectorAll("item")].map(it => ({
-    src: src.name,
-    title: (it.querySelector("title") || {}).textContent || "",
-    link: (it.querySelector("link") || {}).textContent.trim() || "",
-    date: Date.parse((it.querySelector("pubDate") || {}).textContent || "") || 0,
-  })).filter(i => i.title.trim() && i.link.startsWith("http"));
+  // RSS (item, link kao tekst, pubDate; kod RSS 1.0 kao na Slashdotu dc:date) ili Atom kao kod Reddita
+  // (entry, link href, published / updated)
+  const items = [...x.querySelectorAll("item, entry")].map(it => {
+    const link = it.querySelector("link");
+    return {
+      src: src.name,
+      title: (it.querySelector("title") || {}).textContent || "",
+      link: link ? (link.getAttribute("href") || link.textContent).trim() : "",
+      date: Date.parse((it.querySelector("pubDate, published, updated, date") || {}).textContent || "") || 0,
+    };
+  }).filter(i => i.title.trim() && i.link.startsWith("http"));
   if (!items.length) throw new Error("prazan feed");
   return items.sort((a, b) => b.date - a.date).slice(0, NEWS.perSource);
 }
 
 async function loadNews() {
   // Svaki izvor posebno: ako jedan ne radi (npr. pomoćnik nije pokrenut), ostali se i dalje vide.
-  const res = await Promise.allSettled(NEWS.sources.map(loadSource));
+  clearTimeout(newsTimer);
+  const seq = ++newsSeq, sources = activeSources();
+  const res = await Promise.allSettled(sources.map(loadSource));
+  if (seq !== newsSeq) return;   // izbor izvora je u međuvremenu promijenjen
   const old = {};
   for (const n of news) (old[n.src] = old[n.src] || []).push(n);
   let all = [], failed = 0;
   res.forEach((r, i) => {
     if (r.status === "fulfilled") all.push(...r.value);
-    else { failed++; console.warn("vijesti " + NEWS.sources[i].name + ":", r.reason); all.push(...(old[NEWS.sources[i].name] || [])); }
+    else { failed++; console.warn("vijesti " + sources[i].name + ":", r.reason); all.push(...(old[sources[i].name] || [])); }
   });
   if (all.length) {
     news = all.sort((a, b) => b.date - a.date).slice(0, NEWS.perPage * NEWS.pages);
+    applyTitles();
     try { localStorage.setItem("vijesti", JSON.stringify(news)); } catch (e) {}
   }
   newsPage = 0;
   renderNews();
-  setTimeout(loadNews, (failed ? CONFIG.retryMin : NEWS.refreshMin) * 60000);
+  fillTitles(seq);
+  newsTimer = setTimeout(loadNews, (failed ? CONFIG.retryMin : NEWS.refreshMin) * 60000);
 }
 
 function renderNews() {
@@ -690,6 +729,7 @@ function renderNews() {
   const pages = Math.ceil(news.length / NEWS.perPage);
   newsPage %= pages;
   const today = new Date().toDateString();
+  $("news").style.gridTemplateRows = `repeat(${NEWS.perPage}, minmax(0, 1fr))`;
   $("news").innerHTML = news.slice(newsPage * NEWS.perPage, (newsPage + 1) * NEWS.perPage).map(n => {
     const d = new Date(n.date), t = n.date ? (d.toDateString() === today ? "" : d.getDate() + ". ") + pad(d.getHours()) + ":" + pad(d.getMinutes()) : "";
     const meta = [t, n.src === "Vijesti" || !n.src ? section(n.link) : n.src].filter(Boolean).join(" · ");
@@ -698,6 +738,14 @@ function renderNews() {
   $("news-dots").innerHTML = pages > 1 ? Array.from({ length: pages }, (_, i) => `<span${i === newsPage ? ' class="on"' : ""}></span>`).join("") : "";
 }
 setInterval(() => { newsPage++; renderNews(); }, NEWS.rotateSec * 1000);
+$("news").addEventListener("click", e => {
+  const a = e.target.closest("a");
+  if (!a) return;
+  e.preventDefault();
+  fetch(NEWS.opener + encodeURIComponent(a.href))
+    .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); })
+    .catch(err => { console.warn("otvaranje vijesti:", err); window.open(a.href, "_blank", "noopener"); });
+});
 
 // ---- Ekran da se ne gasi dok je stranica otvorena ----
 let lock = null;
@@ -712,8 +760,15 @@ document.addEventListener("dblclick", () => {
   if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {});
 });
 
+// Naslovi prate CONFIG: "Narednih 6 sati", "Danas i naredna 3 dana"
+const few = n => n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14);
+$("hours-label").textContent = (few(CONFIG.hours) ? "Naredna " + CONFIG.hours + " sata" : "Narednih " + CONFIG.hours + " sati");
+$("days-label").textContent = CONFIG.days < 2 ? "Danas" : "Danas i " + (few(CONFIG.days - 1) ? "naredna " : "narednih ") + (CONFIG.days - 1) + " dana";
+
 buildDial();
 tick();
+news = news.filter(n => !newsOff.includes(n.src));
+renderSources();
 renderNews();
 loadNews();
 renderModels();

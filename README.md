@@ -1,10 +1,11 @@
 # Sat i prognoza
 
-Dashboard za pomoćni ekran: analogni sat, datum, kalendar sa crnogorskim praznicima,
-vremenska prognoza (Open-Meteo, izbor modela i mjesta) i vijesti (Vijesti.me, BBC).
+Dashboard za pomoćni ekran: analogni sat, kalendar sa crnogorskim praznicima,
+vremenska prognoza (Open-Meteo, izbor modela i mjesta) i vijesti (Vijesti.me, BBC, Reddit r/worldnews, Slashdot;
+izvori se uključuju i isključuju dugmadima iznad vijesti, a klik na vijest je otvara u Firefoxu).
 Jedan HTML fajl, otvara se u Edge prozoru bez okvira; radi na Windowsu i Linux Mintu.
 
-Raspored: lijevo sat i kalendar; desno trenutno vrijeme, narednih 12 sati, danas + 3 dana i vijesti.
+Raspored: lijevo sat sa trenutnim vremenom i kalendar; desno narednih 6 sati, danas + 3 dana (vodoravno) i vijesti.
 
 ## Fajlovi
 
@@ -25,7 +26,10 @@ sh install-mint.sh          # prozor ide na prvi ekran koji nije glavni
 sh install-mint.sh LVDS     # ili na ekran sa tim imenom (imena: xrandr --listmonitors)
 ```
 
-Uz `wmctrl` se prozor na tom ekranu i maksimizuje; bez njega samo zauzme veličinu ekrana.
+Prozor se otvara preko cijelog ekrana, bez naslovne trake; F11 ga vraća u običan prozor.
+Na izabrani ekran ga premješta `wmctrl` (`sudo apt install wmctrl`); bez njega ga jednom prevuci sam.
+Vijest na koju klikneš pomoćnik otvara u Firefoxu, u novoj kartici (ako Firefoxa nema, u podrazumijevanom
+pregledniku; ako pomoćnik ne radi, u Edge prozoru).
 
 **Windows** (treba Edge i Python sa python.org):
 
