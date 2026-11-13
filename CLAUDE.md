@@ -34,4 +34,8 @@ Na Windowsu je `python` umjesto `python3` (`python3` je tamo prečica ka Microso
 
 - Mint: `sh install-mint.sh` kopira u `~/.local/share/sat-i-prognoza` i dodaje `~/.config/autostart`.
   Posle izmjene `laptop.html` ponovo pokreni skriptu da se kopija osvježi.
+  Generisani `start.sh` pri svakom pokretanju čita položaj ekrana iz `xrandr --listmonitors` (argument skripte
+  je ime ekrana; bez njega prvi koji nije glavni) i šalje ga Edge-u kao `--window-position/--window-size`.
+  Uz te zastavice Edge ignoriše `--start-maximized`, pa maksimizovanje radi `wmctrl`. `--password-store=basic`
+  je tu jer je uz automatsku prijavu keyring zaključan i Edge bi tražio lozinku.
 - Windows: `install-windows.ps1` pravi prečice u Startup folderu koje pokazuju na ovaj folder.

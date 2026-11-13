@@ -3,12 +3,15 @@
 #   - kopira laptop.html, news_proxy.py i icons/meteocons u ~/.local/share/sat-i-prognoza
 #   - dodaje pokretanje pri prijavi (~/.config/autostart) i stavku u meniju
 #   - odmah ga pokreće
-# Pokretanje:  sh install-mint.sh      (ponovno pokretanje samo osvježi fajlove)
+# Pokretanje:  sh install-mint.sh [EKRAN]   (ponovno pokretanje samo osvježi fajlove)
+#   EKRAN je ime ekrana iz `xrandr --listmonitors` (npr. LVDS) na kojem se prozor otvara;
+#   bez njega se uzima prvi ekran koji nije glavni.
 # Uklanjanje:  rm -r ~/.local/share/sat-i-prognoza ~/.config/sat-i-prognoza-edge \
 #                    ~/.config/autostart/sat-i-prognoza.desktop ~/.local/share/applications/sat-i-prognoza.desktop
 set -e
 SRC=$(cd "$(dirname "$0")" && pwd)
 DEST="$HOME/.local/share/sat-i-prognoza"
+EKRAN="${1:-}"
 
 EDGE=$(command -v microsoft-edge-stable || command -v microsoft-edge || true)
 [ -n "$EDGE" ] || { echo "Greška: Edge nije instaliran (microsoft-edge-stable)."; exit 1; }
@@ -24,7 +27,22 @@ cat > "$DEST/start.sh" <<EOF
 # Pomoćnik za BBC vijesti (sam izađe ako već radi), pa dashboard u posebnom Edge prozoru.
 python3 "$DEST/news_proxy.py" >/dev/null 2>&1 &
 sleep 1
+# Ekran za prozor: EKRAN (ime iz xrandr-a) ili, ako je prazno, prvi koji nije glavni.
+# Edge ne pamti pouzdano na kojem je ekranu bio, pa položaj zadajemo pri svakom pokretanju.
+EKRAN="$EKRAN"
+POS=\$(xrandr --listmonitors 2>/dev/null | awk -v e="\$EKRAN" '
+  NR > 1 && (e != "" ? \$NF == e : index(\$2, "*") == 0) {
+    split(\$3, a, "[/x+]")
+    printf "--window-position=%d,%d --window-size=%d,%d", a[5], a[6], a[1], a[3]; exit }')
+# Uz zadat položaj Edge ne poštuje --start-maximized, pa prozor maksimizuje wmctrl (ako ga ima).
+[ -n "\$POS" ] && command -v wmctrl >/dev/null && (
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    sleep 2
+    wmctrl -x -r laptop.html.Microsoft-edge -b add,maximized_vert,maximized_horz 2>/dev/null && break
+  done ) &
+# --password-store=basic: uz automatsku prijavu keyring je zaključan i Edge bi tražio lozinku.
 exec "$EDGE" --user-data-dir="$HOME/.config/sat-i-prognoza-edge" --no-first-run \\
+  --password-store=basic \$POS \\
   --app="file://$DEST/laptop.html" --start-maximized >/dev/null 2>&1
 EOF
 chmod +x "$DEST/start.sh"
@@ -44,4 +62,4 @@ printf '%s\n' "$DESKTOP" > "$HOME/.local/share/applications/sat-i-prognoza.deskt
 pkill -f -- "--user-data-dir=$HOME/.config/sat-i-prognoza-edge" 2>/dev/null || true
 nohup "$DEST/start.sh" >/dev/null 2>&1 &
 echo "Instalirano u $DEST i pokrenuto. Pokreće se samo pri svakoj prijavi."
-echo "Prozor prevuci na željeni ekran; dvoklik = preko cijelog ekrana."
+echo "Otvara se na pomoćnom ekranu (ili na onom zadatom kao: sh install-mint.sh IME); dvoklik = preko cijelog ekrana."

@@ -21,8 +21,11 @@ Raspored: lijevo sat i kalendar; desno trenutno vrijeme, narednih 12 sati, danas
 **Linux Mint** (treba `microsoft-edge-stable` i `python3`):
 
 ```sh
-sh install-mint.sh
+sh install-mint.sh          # prozor ide na prvi ekran koji nije glavni
+sh install-mint.sh LVDS     # ili na ekran sa tim imenom (imena: xrandr --listmonitors)
 ```
+
+Uz `wmctrl` se prozor na tom ekranu i maksimizuje; bez njega samo zauzme veličinu ekrana.
 
 **Windows** (treba Edge i Python sa python.org):
 
