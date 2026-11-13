@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="sr-Latn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sat i prognoza</title>
+<!--
+  Sat, vremenska prognoza (Open-Meteo, bez ključa) i kalendar za pomoćni ekran.
+  Radi kao običan fajl, bez servera, u Edgeu na Windowsu i na Linux Mintu:
+    Windows:  msedge --app=file:///C:/WWW/re-kindle-main/laptop.html
+    Mint:     microsoft-edge --app=file:///home/<korisnik>/laptop.html
+  Drugo mjesto: klik na ime mjesta gore desno (lista ili pretraga), ili u adresi ?place=Sarajevo&lat=43.856&lon=18.413
+  Model prognoze: klik na Auto / ECMWF / ICON-EU gore desno, ili u adresi ?model=icon_eu
+  Vijesti: vijesti.me direktno; BBC preko pomoćnika news_proxy.py (mora raditi u pozadini).
+  Klik na vijest je otvara.
+  Dvoklik bilo gdje: preko cijelog ekrana (i nazad).
+-->
+<style>
+:root {
+  --bg: #0f1217; --panel: #171b22; --line: #262c36;
+  --fg: #e8ebf0; --dim: #8a92a0; --accent: #f2b84b; --rain: #6fb3ff; --moon: #cfd6e4;
+  --we: #ff9a8b; --hol: #ff5c4d; --rel: #b9a2ff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+/* Sve mjere su u rem, a rem prati visinu prozora: na 768 px visine 1rem = 16 px. */
+html { font-size: calc(100vh / 48); }
+body {
+  background: var(--bg); color: var(--fg); height: 100vh; overflow: hidden;
+  font-family: "Segoe UI", "Noto Sans", Ubuntu, "DejaVu Sans", sans-serif;
+  font-variant-numeric: tabular-nums; user-select: none;
+}
+main { display: grid; grid-template-columns: 43fr 57fr; gap: 1.25rem; height: 100vh; padding: 1.25rem; }
+.col { display: flex; flex-direction: column; gap: 1.25rem; min-height: 0; }
+.card { background: var(--panel); border-radius: 1rem; padding: .95rem 1.4rem; min-height: 0; }
+.dim { color: var(--dim); }
+.label { font-size: 1.05rem; color: var(--dim); letter-spacing: .04em; text-transform: uppercase; }
+
+/* Sat */
+.clock { flex: none; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 2rem; padding-top: .8rem; padding-bottom: .8rem; }
+#analog { width: 17rem; height: 17rem; display: block; }
+#analog .face { fill: #12161c; stroke: var(--line); stroke-width: 2; }
+#analog .maj { stroke: var(--fg); stroke-width: 3.5; stroke-linecap: round; }
+#analog .min { stroke: #3d4450; stroke-width: 1.4; }
+#analog text { fill: var(--dim); font-size: 17px; text-anchor: middle; dominant-baseline: central; }
+#analog .hh { stroke: var(--fg); stroke-width: 7; stroke-linecap: round; }
+#analog .mh { stroke: var(--fg); stroke-width: 4.5; stroke-linecap: round; }
+#analog .sh { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; }
+#analog .pin { fill: var(--accent); }
+#dayname { font-size: 3rem; font-weight: 300; line-height: 1.1; }
+#date { font-size: 1.9rem; margin-top: .3rem; }
+#week { font-size: 1.15rem; color: var(--dim); margin-top: .4rem; }
+#today-hol { font-size: 1.3rem; color: var(--hol); font-weight: 600; margin-top: .8rem; }
+#today-hol.rel { color: var(--rel); font-weight: 400; }
+
+/* Kalendar */
+.calendar { flex: 1; display: flex; flex-direction: column; }
+#cal-title { font-size: 1.6rem; margin-bottom: .5rem; }
+#cal { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: auto repeat(6, 1fr); }
+#cal > div { display: flex; align-items: center; justify-content: center; font-size: 1.45rem; position: relative; }
+#cal span {
+  width: 2.5rem; height: 2.5rem; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  border: 2px solid transparent;
+}
+#cal .wd { font-size: 1rem; color: var(--dim); text-transform: uppercase; padding-bottom: .3rem; }
+#cal .wd.we { color: var(--we); font-weight: 600; background: none; }
+/* vikend: jača boja i blago obojena kolona */
+#cal .we { color: var(--we); font-weight: 600; background: rgba(255, 154, 139, .07); }
+#cal .other { color: #3d4450; font-weight: 400; }
+#cal .other.we { color: #5a4a4a; }
+/* državni praznik (neradno za sve): crveni krug; vjerski: ljubičasta tačka */
+#cal .hol span { border-color: var(--hol); color: var(--hol); font-weight: 700; }
+#cal .rel::after {
+  content: ""; position: absolute; bottom: 4%; left: 50%; width: .4rem; height: .4rem; margin-left: -.2rem;
+  border-radius: 50%; background: var(--rel);
+}
+#cal .other.hol span { border-color: #5a3330; color: #6a3a35; }
+#cal .other.rel::after { opacity: .35; }
+#cal .today span { background: var(--accent); color: #15181d; font-weight: 700; }
+#cal .today.hol span { border-color: var(--hol); box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--hol); }
+#hol-list { font-size: 1.05rem; line-height: 1.45; margin-top: .4rem; color: var(--dim); }
+#hol-list .s { color: var(--hol); }
+#hol-list .r { color: var(--rel); }
+
+/* Trenutno vrijeme */
+.now { flex: none; }
+.now-head { display: flex; align-items: center; gap: 1rem; }
+#status { margin-left: auto; }
+#models { display: flex; gap: .3rem; }
+#models button {
+  font: inherit; font-size: .95rem; color: var(--dim); background: none; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 1rem; padding: .1rem .7rem;
+}
+#models button.on { color: #15181d; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+#place { font-size: 1.5rem; font-weight: 600; cursor: pointer; }
+#place::after { content: " ▾"; font-size: .9rem; color: var(--dim); }
+#place:hover { color: var(--accent); }
+.now { position: relative; }
+#picker {
+  position: absolute; z-index: 5; top: 3.2rem; left: 1rem; width: 26rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: .8rem;
+  padding: .8rem; box-shadow: 0 1rem 2.5rem rgba(0,0,0,.55);
+}
+#picker[hidden] { display: none; }
+#picker input {
+  width: 100%; font: inherit; font-size: 1.15rem; color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: .5rem; padding: .4rem .6rem; outline: none;
+}
+#picker input:focus { border-color: var(--accent); }
+#picker .list { margin-top: .5rem; max-height: 22rem; overflow-y: auto; }
+#picker .list div { padding: .35rem .5rem; border-radius: .4rem; cursor: pointer; font-size: 1.1rem; }
+#picker .list div:hover { background: var(--line); }
+#picker .list div.on { color: var(--accent); font-weight: 600; }
+#picker .list small { color: var(--dim); margin-left: .4rem; }
+#picker .list div.hint { color: var(--dim); font-size: .95rem; cursor: default; background: none; }
+#status { font-size: 1.05rem; color: var(--dim); }
+#status.stale { color: var(--accent); }
+.now-body { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 1.2rem; margin-top: .4rem; }
+.now-body .ico { width: 8.5rem; height: 8.5rem; margin: -.8rem -.4rem -.8rem -.6rem; }
+#temp { font-size: 6rem; font-weight: 300; line-height: 1; }
+#cond { font-size: 1.5rem; margin-top: .3rem; }
+.facts { justify-self: end; text-align: right; font-size: 1.2rem; line-height: 1.55; }
+.facts b { font-weight: 600; }
+
+/* Po satima */
+.hours { flex: none; }
+#hours { display: grid; grid-template-columns: repeat(12, 1fr); margin-top: .35rem; text-align: center; }
+#hours > div { display: flex; flex-direction: column; align-items: center; gap: .05rem; }
+#hours > div + div { border-left: 1px solid var(--line); }
+#hours .h { font-size: 1.1rem; color: var(--dim); }
+#hours .ico { width: 3.1rem; height: 3.1rem; margin: -.25rem 0; }
+#hours .t { font-size: 1.6rem; }
+#hours .p { font-size: 1rem; color: var(--dim); }
+.wet { color: var(--rain) !important; }
+
+/* Donji red: dani lijevo, vijesti desno */
+.bottom { flex: 1; display: grid; grid-template-columns: 1fr 1.1fr; gap: 1.25rem; min-height: 0; }
+
+/* Danas i naredna 3 dana */
+.days { display: flex; flex-direction: column; }
+#days { flex: 1; display: grid; grid-auto-rows: minmax(0, 1fr); margin-top: .3rem; }
+#days > div {
+  display: grid; grid-template-columns: 4.9rem 3.2rem 1fr auto; align-items: center; gap: .6rem;
+  font-size: 1.35rem;
+}
+#days > div + div { border-top: 1px solid var(--line); }
+#days .ico { width: 3.2rem; height: 3.2rem; }
+#days .tmp { white-space: nowrap; }
+#days .tmp b { font-weight: 600; }
+#days .tmp span { color: var(--dim); font-size: 1.15rem; }
+#days .r { font-size: 1.05rem; color: var(--dim); text-align: right; line-height: 1.25; }
+
+/* Vijesti */
+.news { display: flex; flex-direction: column; }
+.news .label { display: flex; justify-content: space-between; align-items: center; }
+#news-dots span { display: inline-block; width: .45rem; height: .45rem; border-radius: 50%; background: var(--line); margin-left: .3rem; }
+#news-dots span.on { background: var(--accent); }
+#news { flex: 1; display: grid; grid-template-rows: repeat(4, minmax(0, 1fr)); margin-top: .3rem; }
+#news a {
+  color: var(--fg); text-decoration: none; font-size: 1.12rem; line-height: 1.3;
+  display: flex; align-items: center; min-height: 0;
+}
+#news a + a { border-top: 1px solid var(--line); }
+#news a > div { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+#news .meta { color: var(--accent); font-size: .95rem; margin-right: .4rem; }
+#news a:hover { color: #fff; }
+.msg { font-size: 1.3rem; color: var(--dim); padding: 1rem 0; }
+
+/* Ikonice (Meteocons) */
+.ico { display: block; object-fit: contain; }
+</style>
+</head>
+<body>
+<main>
+  <div class="col">
+    <section class="card clock">
+      <svg id="analog" viewBox="0 0 200 200"></svg>
+      <div>
+        <div id="dayname"></div>
+        <div id="date"></div>
+        <div id="week"></div>
+        <div id="today-hol"></div>
+      </div>
+    </section>
+    <section class="card calendar">
+      <div id="cal-title"></div>
+      <div id="cal"></div>
+      <div id="hol-list"></div>
+    </section>
+  </div>
+  <div class="col">
+    <section class="card now">
+      <div class="now-head"><span id="place" title="Promijeni mjesto"></span><span id="models"></span><span id="status"></span></div>
+      <div id="picker" hidden><input id="pick-q" placeholder="Upiši grad…" autocomplete="off" spellcheck="false"><div class="list" id="pick-list"></div></div>
+      <div class="now-body" id="now"><div class="msg">Prognoza se učitava…</div></div>
+    </section>
+    <section class="card hours">
+      <div class="label">Narednih 12 sati</div>
+      <div id="hours"></div>
+    </section>
+    <div class="bottom">
+      <section class="card days">
+        <div class="label" id="days-label">Danas i naredna 3 dana</div>
+        <div id="days"></div>
+      </section>
+      <section class="card news">
+        <div class="label"><span>Vijesti · vijesti.me · BBC</span><span id="news-dots"></span></div>
+        <div id="news"><div class="msg">Vijesti se učitavaju…</div></div>
+      </section>
+    </div>
+  </div>
+</main>
+<script>
+"use strict";
+const CONFIG = {
+  place: "Herceg Novi", lat: 42.4531, lon: 18.5375,
+  refreshMin: 15,   // koliko često se prognoza osvježava
+  retryMin: 2,      // kad nema interneta, ponovni pokušaj nakon ovoliko minuta
+  hours: 12,        // koliko kolona "po satima" (uz to promijeni repeat(12, ...) u CSS-u i naslov)
+  hourStep: 1,      // razmak između kolona u satima (3 = svaka 3 sata)
+  days: 4,          // danas + naredna 3 dana
+};
+const NEWS = {
+  // Izvori. "direct" = stranica čita sama; ostali idu preko news_proxy.py na ovom računaru.
+  sources: [
+    { name: "Vijesti", url: "https://www.vijesti.me/rss" },
+    { name: "BBC", url: "http://127.0.0.1:8765/feed/bbc-sr" },
+    { name: "BBC World", url: "http://127.0.0.1:8765/feed/bbc-world" },
+  ],
+  perSource: 8,     // najviše ovoliko najnovijih po izvoru, da jedan izvor ne potisne ostale
+  perPage: 4,       // vijesti odjednom na ekranu
+  pages: 4,         // koliko strana se smjenjuje (ukupno perPage * pages najnovijih)
+  rotateSec: 20,    // smjena strane
+  refreshMin: 15,
+};
+// Ponuđena mjesta u izboru (klik na ime mjesta). Pretragom nađena mjesta se dodaju na vrh liste.
+const PLACES = [
+  { name: "Herceg Novi", lat: 42.4531, lon: 18.5375 },
+  { name: "Kotor", lat: 42.4247, lon: 18.7712 },
+  { name: "Tivat", lat: 42.4364, lon: 18.6961 },
+  { name: "Budva", lat: 42.2911, lon: 18.8403 },
+  { name: "Bar", lat: 42.0931, lon: 19.1003 },
+  { name: "Podgorica", lat: 42.4411, lon: 19.2636 },
+  { name: "Nikšić", lat: 42.7731, lon: 18.9445 },
+  { name: "Žabljak", lat: 43.1542, lon: 19.1225 },
+  { name: "Trebinje", lat: 42.7119, lon: 18.3436 },
+  { name: "Dubrovnik", lat: 42.6507, lon: 18.0944 },
+  { name: "Sarajevo", lat: 43.8486, lon: 18.3564 },
+  { name: "Beograd", lat: 44.8040, lon: 20.4651 },
+];
+const q = new URLSearchParams(location.search);
+try {  // zadnje izabrano mjesto
+  const m = JSON.parse(localStorage.getItem("mjesto"));
+  if (m && m.name && isFinite(m.lat) && isFinite(m.lon)) Object.assign(CONFIG, { place: m.name, lat: m.lat, lon: m.lon });
+} catch (e) {}
+if (q.get("place")) CONFIG.place = q.get("place");
+if (q.get("lat") && q.get("lon")) { CONFIG.lat = +q.get("lat"); CONFIG.lon = +q.get("lon"); }
+
+// Modeli prognoze. "Auto" pušta Open-Meteo da sam izabere najbolji za mjesto.
+// ICON-EU ide samo oko 5 dana unaprijed, ECMWF do 15.
+const MODELS = [
+  { id: "best_match", name: "Auto" },
+  { id: "ecmwf_ifs025", name: "ECMWF" },
+  { id: "icon_eu", name: "ICON-EU" },
+];
+const known = id => MODELS.some(m => m.id === id);
+let model = known(q.get("model")) ? q.get("model") : known(localStorage.getItem("model")) ? localStorage.getItem("model") : "best_match";
+
+const DAYS = ["nedjelja", "ponedjeljak", "utorak", "srijeda", "četvrtak", "petak", "subota"];
+const DAYS_SHORT = ["Ned", "Pon", "Uto", "Sri", "Čet", "Pet", "Sub"];
+const MONTHS = ["januar", "februar", "mart", "april", "maj", "jun", "jul", "avgust", "septembar", "oktobar", "novembar", "decembar"];
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2, "0");
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const deg = x => x == null ? "–" : Math.round(x) + "°";
+const hm = iso => iso.slice(11, 16);  // "2026-11-13T07:02" -> "07:02"
+
+// ---- Praznici u Crnoj Gori ----
+// Državni i drugi praznici (neradni za sve), po Zakonu o državnim i drugim praznicima.
+// Ako prvi dan padne u subotu ili nedjelju, neradan je i naredni radni dan (ponedjeljak, za nedjelju i utorak).
+const STATE_HOLIDAYS = [
+  [1, 1, "Nova godina"], [5, 1, "Praznik rada"], [5, 21, "Dan nezavisnosti"],
+  [7, 13, "Dan državnosti"], [11, 13, "Njegošev dan"],
+];
+const key = d => d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+
+function easter(y) {  // katolički Uskrs (gregorijansko računanje)
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4;
+  const f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mo = Math.floor((h + l - 7 * m + 114) / 31), da = (h + l - 7 * m + 114) % 31 + 1;
+  return new Date(y, mo - 1, da);
+}
+function orthodoxEaster(y) {  // pravoslavni Vaskrs: julijansko računanje + 13 dana (važi 1900–2099)
+  const a = y % 4, b = y % 7, c = y % 19, d = (19 * c + 15) % 30, e = (2 * a + 4 * b - d + 34) % 7;
+  const mo = Math.floor((d + e + 114) / 31), da = (d + e + 114) % 31 + 1;
+  return new Date(y, mo - 1, da + 13);
+}
+
+const holidayCache = {};
+function holidaysOfYear(y) {
+  if (holidayCache[y]) return holidayCache[y];
+  const map = {};
+  const add = (d, name, state) => (map[key(d)] = map[key(d)] || []).push({ name, state });
+  for (const [mo, da, name] of STATE_HOLIDAYS) {
+    const first = new Date(y, mo - 1, da), wd = first.getDay();
+    const days = wd === 0 || wd === 6 ? 3 : 2;  // subota/nedjelja: + jedan radni dan
+    for (let n = 0; n < days; n++) add(addDays(first, n), name, true);
+  }
+  // Vjerski praznici: neradni za pripadnike te vjerske zajednice.
+  const oe = orthodoxEaster(y), ce = easter(y);
+  add(new Date(y, 0, 6), "Badnji dan (prav.)", false);
+  add(new Date(y, 0, 7), "Božić (prav.)", false); add(new Date(y, 0, 8), "Božić (prav.)", false);
+  add(addDays(oe, -2), "Veliki petak (prav.)", false); add(oe, "Vaskrs", false); add(addDays(oe, 1), "Vaskrsni ponedjeljak", false);
+  add(addDays(ce, -2), "Veliki petak (kat.)", false); add(ce, "Uskrs", false); add(addDays(ce, 1), "Uskrsni ponedjeljak", false);
+  add(new Date(y, 10, 1), "Svi sveti (kat.)", false);
+  add(new Date(y, 11, 24), "Badnji dan (kat.)", false);
+  add(new Date(y, 11, 25), "Božić (kat.)", false); add(new Date(y, 11, 26), "Božić (kat.)", false);
+  // Bajrami (islamski kalendar Umm al-Qura) i jevrejski praznici. Islamska zajednica datume objavljuje
+  // po viđenju mladog mjeseca, pa bajram ponekad bude dan kasnije nego ovdje.
+  try {
+    const isl = new Intl.DateTimeFormat("en-u-ca-islamic-umalqura", { month: "numeric", day: "numeric" });
+    const heb = new Intl.DateTimeFormat("en-u-ca-hebrew", { month: "long", day: "numeric" });
+    const part = (f, d, t) => f.formatToParts(d).find(p => p.type === t).value;
+    for (let d = new Date(y, 0, 1); d.getFullYear() === y; d = addDays(d, 1)) {
+      const im = +part(isl, d, "month"), id = +part(isl, d, "day");
+      if (im === 10 && id <= 3) add(d, "Ramazanski bajram", false);
+      if (im === 12 && id >= 10 && id <= 12) add(d, "Kurban bajram", false);
+      const hmon = part(heb, d, "month"), hd = +part(heb, d, "day");
+      if (hmon === "Nisan" && (hd === 15 || hd === 16)) add(d, "Pesah", false);
+      if (hmon === "Tishri" && (hd === 10 || hd === 11)) add(d, "Jom Kipur", false);
+    }
+  } catch (e) { console.warn("islamski/jevrejski kalendar:", e); }
+  return (holidayCache[y] = map);
+}
+const holidaysOn = d => holidaysOfYear(d.getFullYear())[key(d)] || [];
+
+// ---- Sat i kalendar ----
+function isoWeek(d) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  return Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7);
+}
+
+function renderCalendar(d) {
+  const y = d.getFullYear(), m = d.getMonth();
+  $("cal-title").textContent = cap(MONTHS[m]) + " " + y;
+  const offset = (new Date(y, m, 1).getDay() + 6) % 7;  // ponedjeljak prvi
+  let h = ["Pon", "Uto", "Sri", "Čet", "Pet", "Sub", "Ned"]
+    .map((n, i) => `<div class="wd${i > 4 ? " we" : ""}">${n}</div>`).join("");
+  for (let i = 0; i < 42; i++) {
+    const c = new Date(y, m, 1 - offset + i), cls = [], hs = holidaysOn(c);
+    if (c.getMonth() !== m) cls.push("other");
+    if (i % 7 > 4) cls.push("we");
+    if (hs.some(x => x.state)) cls.push("hol");
+    else if (hs.length) cls.push("rel");
+    if (c.toDateString() === d.toDateString()) cls.push("today");
+    const title = hs.map(x => x.name).join(", ");
+    h += `<div class="${cls.join(" ")}"${title ? ` title="${title}"` : ""}><span>${c.getDate()}</span></div>`;
+  }
+  $("cal").innerHTML = h;
+
+  // Praznici ovog mjeseca ispod kalendara; uzastopni dani istog praznika u jednom redu ("13–14.").
+  const items = [];
+  for (let day = 1; day <= new Date(y, m + 1, 0).getDate(); day++)
+    for (const x of holidaysOn(new Date(y, m, day))) {
+      const last = items.find(it => it.name === x.name && it.to === day - 1);
+      if (last) last.to = day; else items.push({ ...x, from: day, to: day });
+    }
+  items.sort((a, b) => a.from - b.from || b.state - a.state);
+  $("hol-list").innerHTML = items.map(it =>
+    `<span class="${it.state ? "s" : "r"}">${it.from === it.to ? it.from : it.from + "–" + it.to}. ${it.name}</span>`).join(" · ");
+}
+
+// Sat sa kazaljkama: brojčanik se nacrta jednom, kazaljke se okreću svake sekunde.
+function buildDial() {
+  let s = '<circle class="face" cx="100" cy="100" r="96"/>';
+  for (let i = 0; i < 60; i++) {
+    const a = i * Math.PI / 30, major = i % 5 === 0, r1 = major ? 79 : 85, r2 = 90;
+    s += `<line class="${major ? "maj" : "min"}" x1="${(100 + r1 * Math.sin(a)).toFixed(1)}" y1="${(100 - r1 * Math.cos(a)).toFixed(1)}" x2="${(100 + r2 * Math.sin(a)).toFixed(1)}" y2="${(100 - r2 * Math.cos(a)).toFixed(1)}"/>`;
+  }
+  [[12, 100, 34], [3, 166, 100], [6, 100, 166], [9, 34, 100]].forEach(([n, x, y]) => { s += `<text x="${x}" y="${y}">${n}</text>`; });
+  s += '<line id="hh" class="hh" x1="100" y1="112" x2="100" y2="54"/>' +
+       '<line id="mh" class="mh" x1="100" y1="114" x2="100" y2="26"/>' +
+       '<line id="sh" class="sh" x1="100" y1="124" x2="100" y2="20"/>' +
+       '<circle class="pin" cx="100" cy="100" r="4.5"/>';
+  $("analog").innerHTML = s;
+}
+const turn = (id, deg) => $(id).setAttribute("transform", `rotate(${deg.toFixed(2)} 100 100)`);
+
+let shownDay = "";
+function tick() {
+  const d = new Date();
+  const h = d.getHours(), m = d.getMinutes(), sec = d.getSeconds();
+  turn("hh", (h % 12 + m / 60) * 30);
+  turn("mh", (m + sec / 60) * 6);
+  turn("sh", sec * 6);
+  if (d.toDateString() !== shownDay) {  // pri pokretanju i u ponoć
+    shownDay = d.toDateString();
+    $("dayname").textContent = cap(DAYS[d.getDay()]);
+    $("date").textContent = d.getDate() + ". " + MONTHS[d.getMonth()];
+    $("week").textContent = d.getFullYear() + ". · sedmica " + isoWeek(d);
+    const th = holidaysOn(d);
+    $("today-hol").textContent = th.map(x => x.name).join(" · ");
+    $("today-hol").className = th.some(x => x.state) ? "" : "rel";
+    renderCalendar(d);
+  }
+  if (d.getSeconds() === 0) renderWeather();  // pomjeri prognozu po satima i status
+  setTimeout(tick, 1000 - Date.now() % 1000 + 5);
+}
+
+// ---- Ikonice: Meteocons (Bas Milius, MIT licenca), u icons/meteocons ----
+// Velika ikonica za trenutno vrijeme je animirana; male (po satima, po danima) su statične,
+// da laptop ne crta 17 animacija odjednom.
+function iconName(c, day) {
+  const dn = day ? "day" : "night";
+  if (c == null) return "not-available";
+  if (c === 0) return "clear-" + dn;
+  if (c === 1) return "mostly-clear-" + dn;
+  if (c === 2) return "partly-cloudy-" + dn;
+  if (c === 3) return "overcast";
+  if (c === 45 || c === 48) return "fog-" + dn;
+  if (c >= 51 && c <= 55) return "drizzle";
+  if (c === 56 || c === 57 || c === 66 || c === 67) return "sleet";
+  if (c === 61 || c === 63) return "rain";
+  if (c === 65) return "extreme-rain";
+  if (c === 71 || c === 73 || c === 77) return "snow";
+  if (c === 75) return "extreme-snow";
+  if (c >= 80 && c <= 82) return "partly-cloudy-" + dn + "-rain";
+  if (c === 85 || c === 86) return "partly-cloudy-" + dn + "-snow";
+  if (c === 95) return "thunderstorms-" + dn + "-rain";
+  if (c === 96 || c === 99) return "thunderstorms-" + dn + "-hail";
+  return "not-available";
+}
+function icon(code, day, animated) {
+  return `<img class="ico" src="icons/meteocons/${animated ? "anim" : "static"}/${iconName(code, day)}.svg" alt="">`;
+}
+
+function cond(c) {
+  if (c === 0) return "Vedro";
+  if (c === 1) return "Pretežno vedro";
+  if (c === 2) return "Djelimično oblačno";
+  if (c === 3) return "Oblačno";
+  if (c === 45 || c === 48) return "Magla";
+  if (c >= 51 && c <= 55) return "Rosulja";
+  if (c === 56 || c === 57) return "Ledena rosulja";
+  if (c === 61) return "Slaba kiša";
+  if (c === 63) return "Kiša";
+  if (c === 65) return "Jaka kiša";
+  if (c === 66 || c === 67) return "Ledena kiša";
+  if (c === 71) return "Slab snijeg";
+  if (c === 73) return "Snijeg";
+  if (c === 75) return "Jak snijeg";
+  if (c === 77) return "Snježna zrna";
+  if (c === 80 || c === 81) return "Pljuskovi";
+  if (c === 82) return "Jaki pljuskovi";
+  if (c === 85 || c === 86) return "Snježni pljuskovi";
+  if (c === 95) return "Grmljavina";
+  if (c === 96 || c === 99) return "Grmljavina s gradom";
+  return "–";
+}
+
+// ---- Prognoza ----
+let wx = null, fetchedAt = 0, online = false, timer = 0;
+const cacheKey = () => "prognoza:" + CONFIG.lat + "," + CONFIG.lon + ":" + model;
+function loadCache() {  // zadnja dobra prognoza ovog modela, da se nešto vidi odmah i bez interneta
+  wx = null; fetchedAt = 0;
+  try { const c = JSON.parse(localStorage.getItem(cacheKey())); if (c && c.wx) { wx = c.wx; fetchedAt = c.fetchedAt; } } catch (e) {}
+}
+loadCache();
+
+function renderModels() {
+  $("models").innerHTML = MODELS.map(m => `<button data-id="${m.id}"${m.id === model ? ' class="on"' : ""}>${m.name}</button>`).join("");
+}
+$("models").addEventListener("click", e => {
+  const id = e.target.dataset && e.target.dataset.id;
+  if (!id || id === model) return;
+  model = id; localStorage.setItem("model", id);
+  renderModels(); loadCache(); online = true; renderWeather();
+  clearTimeout(timer); load();
+});
+$("models").addEventListener("dblclick", e => e.stopPropagation());  // dvoklik na dugme ne mijenja cijeli ekran
+
+function url() {
+  return "https://api.open-meteo.com/v1/forecast?latitude=" + CONFIG.lat + "&longitude=" + CONFIG.lon +
+    "&timezone=auto&forecast_days=8" +
+    "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,is_day,wind_speed_10m" +
+    "&hourly=temperature_2m,weather_code,precipitation_probability,is_day" +
+    "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,sunrise,sunset" +
+    (model === "best_match" ? "" : "&models=" + model);
+}
+
+async function load() {
+  const asked = cacheKey();
+  try {
+    const r = await fetch(url(), { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json();
+    if (!j.current || !j.hourly || !j.daily) throw new Error("neočekivan odgovor");
+    if (asked !== cacheKey()) return;  // u međuvremenu izabran drugi model ili mjesto
+    wx = j; fetchedAt = Date.now(); online = true;
+    try { localStorage.setItem(cacheKey(), JSON.stringify({ wx, fetchedAt })); } catch (e) {}
+  } catch (e) {
+    if (asked !== cacheKey()) return;
+    console.warn("prognoza:", e);
+    online = false;
+  }
+  renderWeather();
+  clearTimeout(timer);
+  timer = setTimeout(load, (online ? CONFIG.refreshMin : CONFIG.retryMin) * 60000);
+}
+
+// ---- Izbor mjesta ----
+let recent = [];
+try { recent = (JSON.parse(localStorage.getItem("mjesta")) || []).filter(m => m && m.name && isFinite(m.lat) && isFinite(m.lon)); } catch (e) {}
+const samePlace = (a, b) => Math.abs(a.lat - b.lat) < 0.01 && Math.abs(a.lon - b.lon) < 0.01;
+let pickItems = [], searchTimer = 0, searchSeq = 0;
+
+function renderPicker(items, msg) {
+  pickItems = items || [];
+  $("pick-list").innerHTML = msg ? `<div class="hint">${esc(msg)}</div>` : pickItems.map((m, i) =>
+    `<div data-i="${i}"${samePlace(m, CONFIG) ? ' class="on"' : ""}>${esc(m.name)}${m.sub ? `<small>${esc(m.sub)}</small>` : ""}</div>`).join("");
+}
+const defaultList = () => [...recent, ...PLACES.filter(p => !recent.some(r => samePlace(r, p)))];
+function openPicker() {
+  $("pick-q").value = ""; renderPicker(defaultList());
+  $("picker").hidden = false; $("pick-q").focus();
+}
+function closePicker() { $("picker").hidden = true; searchSeq++; clearTimeout(searchTimer); }
+
+async function search(text) {  // Open-Meteo geokodiranje: ime -> koordinate
+  const seq = ++searchSeq;
+  try {
+    const r = await fetch("https://geocoding-api.open-meteo.com/v1/search?count=8&language=hr&format=json&name=" + encodeURIComponent(text));
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json();
+    if (seq !== searchSeq) return;
+    const found = (j.results || []).map(g => ({
+      name: g.name, lat: +g.latitude.toFixed(4), lon: +g.longitude.toFixed(4),
+      sub: [g.admin1, g.country].filter(Boolean).join(", "),
+    }));
+    renderPicker(found, found.length ? "" : "Nije nađeno");
+  } catch (e) {
+    if (seq === searchSeq) renderPicker([], "Pretraga ne radi (nema interneta?)");
+  }
+}
+function choosePlace(m) {
+  closePicker();
+  const pick = { name: m.name, lat: m.lat, lon: m.lon };
+  if (!PLACES.some(p => samePlace(p, pick)))  // nađeno pretragom: zapamti među skorašnjima
+    recent = [{ ...pick, sub: m.sub || "" }, ...recent.filter(r => !samePlace(r, pick))].slice(0, 6);
+  try { localStorage.setItem("mjesto", JSON.stringify(pick)); localStorage.setItem("mjesta", JSON.stringify(recent)); } catch (e) {}
+  if (samePlace(pick, CONFIG) && pick.name === CONFIG.place) return;
+  Object.assign(CONFIG, { place: pick.name, lat: pick.lat, lon: pick.lon });
+  if (q.get("place") || q.get("lat"))  // mjesto iz adrese više ne važi
+    history.replaceState(null, "", location.pathname + (q.get("model") ? "?model=" + q.get("model") : ""));
+  loadCache(); online = true; renderWeather();
+  clearTimeout(timer); load();
+}
+$("place").addEventListener("click", e => { e.stopPropagation(); $("picker").hidden ? openPicker() : closePicker(); });
+$("place").addEventListener("dblclick", e => e.stopPropagation());
+$("picker").addEventListener("dblclick", e => e.stopPropagation());
+$("picker").addEventListener("click", e => {
+  e.stopPropagation();
+  const row = e.target.closest("[data-i]");
+  if (row) choosePlace(pickItems[+row.dataset.i]);
+});
+$("pick-q").addEventListener("input", () => {
+  clearTimeout(searchTimer); searchSeq++;
+  const t = $("pick-q").value.trim();
+  if (!t) { renderPicker(defaultList()); return; }
+  // odmah filtriraj ponuđena mjesta, pa pitaj pretragu
+  const low = t.toLowerCase(), local = defaultList().filter(p => p.name.toLowerCase().startsWith(low));
+  renderPicker(local, local.length ? "" : "Tražim…");
+  if (t.length >= 2) searchTimer = setTimeout(() => search(t), 350);
+});
+$("pick-q").addEventListener("keydown", e => {
+  if (e.key === "Escape") closePicker();
+  if (e.key === "Enter" && pickItems.length) choosePlace(pickItems[0]);
+});
+document.addEventListener("click", () => { if (!$("picker").hidden) closePicker(); });
+
+function rainText(p, mm) {
+  const pct = p == null ? "–" : p + "%";
+  if (mm == null || mm < 0.1) return pct;
+  return pct + " · " + (mm < 1 ? "<1" : Math.round(mm)) + " mm";
+}
+
+function renderWeather() {
+  $("place").textContent = CONFIG.place;
+  if (!wx) {
+    $("status").textContent = "";
+    $("now").innerHTML = `<div class="msg">${online ? "Prognoza se učitava…" : "Nema veze sa internetom, pokušavam ponovo…"}</div>`;
+    return;
+  }
+  const f = new Date(fetchedAt), at = pad(f.getHours()) + ":" + pad(f.getMinutes());
+  const old = Date.now() - fetchedAt > 3 * CONFIG.refreshMin * 60000;
+  $("status").textContent = old ? "Bez veze · podaci od " + (f.toDateString() === new Date().toDateString() ? at : f.getDate() + ". " + MONTHS[f.getMonth()] + " " + at) : "Ažurirano " + at;
+  $("status").className = old ? "stale" : "";
+
+  // Lokalno vrijeme mjesta prognoze, u istom obliku kao Open-Meteo vremena ("2026-11-13T14:37").
+  const locNow = new Date(Date.now() + wx.utc_offset_seconds * 1000).toISOString().slice(0, 16);
+  const D = wx.daily, H = wx.hourly, C = wx.current;
+  const ti = D.time.indexOf(locNow.slice(0, 10));
+
+  // Sada
+  let facts = `Osjećaj <b>${deg(C.apparent_temperature)}</b><br>Vlažnost <b>${C.relative_humidity_2m}%</b> · Vjetar <b>${Math.round(C.wind_speed_10m)} km/h</b>`;
+  if (ti >= 0) facts = `Danas <b>${deg(D.temperature_2m_max[ti])} / ${deg(D.temperature_2m_min[ti])}</b> · Kiša <b>${rainText(D.precipitation_probability_max[ti], D.precipitation_sum[ti])}</b><br>` +
+    facts + `<br><span class="dim">Izlazak ${hm(D.sunrise[ti])} · Zalazak ${hm(D.sunset[ti])}</span>`;
+  $("now").innerHTML = icon(C.weather_code, C.is_day, true) +
+    `<div><div id="temp">${deg(C.temperature_2m)}</div><div id="cond">${cond(C.weather_code)}</div></div>` +
+    `<div class="facts">${facts}</div>`;
+
+  // Po satima: CONFIG.hours kolona, svakih CONFIG.hourStep sati
+  let start = H.time.findIndex(t => t > locNow), h = "";
+  if (start >= 0) for (let s = 0; s < CONFIG.hours && start + CONFIG.hourStep * s < H.time.length; s++) {
+    const i = start + CONFIG.hourStep * s, p = H.precipitation_probability[i];
+    if (H.temperature_2m[i] == null) break;  // model ne ide dalje
+    h += `<div><span class="h">${hm(H.time[i])}</span>${icon(H.weather_code[i], H.is_day[i])}` +
+      `<span class="t">${deg(H.temperature_2m[i])}</span><span class="p${p >= 30 ? " wet" : ""}">${p == null ? "–" : p + "%"}</span></div>`;
+  }
+  $("hours").innerHTML = h || `<div class="msg">Nema podataka po satima</div>`;
+
+  // Danas i naredni dani: max / min, šansa za kišu i količina
+  if (ti < 0) { $("days").innerHTML = `<div class="msg">Prognoza je zastarjela</div>`; return; }
+  const idx = [];
+  for (let k = 0; k < CONFIG.days && ti + k < D.time.length; k++)
+    if (D.temperature_2m_max[ti + k] != null && D.temperature_2m_min[ti + k] != null) idx.push(ti + k);
+  if (!idx.length) { $("days").innerHTML = `<div class="msg">Nema dnevne prognoze</div>`; return; }
+  $("days").innerHTML = idx.map((i, k) => {
+    const dt = new Date(D.time[i] + "T12:00"), p = D.precipitation_probability_max[i], mm = D.precipitation_sum[i];
+    const name = k === 0 ? "Danas" : k === 1 ? "Sutra" : DAYS_SHORT[dt.getDay()] + " " + dt.getDate() + ".";
+    const amount = mm == null || mm < 0.1 ? "" : "<br>" + (mm < 1 ? "<1" : Math.round(mm)) + " mm";
+    return `<div><span${k === 0 ? ' style="font-weight:600"' : ""}>${name}</span>${icon(D.weather_code[i], 1)}` +
+      `<span class="tmp"><b>${deg(D.temperature_2m_max[i])}</b> <span>/ ${deg(D.temperature_2m_min[i])}</span></span>` +
+      `<span class="r${p >= 30 ? " wet" : ""}">${p == null ? "–" : p + "%"}${amount}</span></div>`;
+  }).join("");
+}
+
+// ---- Vijesti ----
+const esc = t => t.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const SECTIONS = {
+  "crna-hronika": "Hronika", politika: "Politika", drustvo: "Društvo", ekonomija: "Ekonomija",
+  kultura: "Kultura", svijet: "Svijet", sport: "Sport", zabava: "Zabava", kolumne: "Kolumne", bbc: "BBC",
+};
+function section(link) {  // rubrika iz linka: /vijesti/crna-hronika/... -> "Hronika", /sport/fudbal/... -> "Sport"
+  try {
+    const [a, b] = new URL(link).pathname.split("/").filter(Boolean);
+    return a === "vijesti" ? SECTIONS[b] || "Vijesti" : SECTIONS[a] || cap(a || "");
+  } catch (e) { return ""; }
+}
+let news = [], newsPage = 0;
+try { news = JSON.parse(localStorage.getItem("vijesti")) || []; } catch (e) {}
+
+async function loadSource(src) {
+  const r = await fetch(src.url, { cache: "no-store" });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  const x = new DOMParser().parseFromString(await r.text(), "text/xml");
+  const items = [...x.querySelectorAll("item")].map(it => ({
+    src: src.name,
+    title: (it.querySelector("title") || {}).textContent || "",
+    link: (it.querySelector("link") || {}).textContent.trim() || "",
+    date: Date.parse((it.querySelector("pubDate") || {}).textContent || "") || 0,
+  })).filter(i => i.title.trim() && i.link.startsWith("http"));
+  if (!items.length) throw new Error("prazan feed");
+  return items.sort((a, b) => b.date - a.date).slice(0, NEWS.perSource);
+}
+
+async function loadNews() {
+  // Svaki izvor posebno: ako jedan ne radi (npr. pomoćnik nije pokrenut), ostali se i dalje vide.
+  const res = await Promise.allSettled(NEWS.sources.map(loadSource));
+  const old = {};
+  for (const n of news) (old[n.src] = old[n.src] || []).push(n);
+  let all = [], failed = 0;
+  res.forEach((r, i) => {
+    if (r.status === "fulfilled") all.push(...r.value);
+    else { failed++; console.warn("vijesti " + NEWS.sources[i].name + ":", r.reason); all.push(...(old[NEWS.sources[i].name] || [])); }
+  });
+  if (all.length) {
+    news = all.sort((a, b) => b.date - a.date).slice(0, NEWS.perPage * NEWS.pages);
+    try { localStorage.setItem("vijesti", JSON.stringify(news)); } catch (e) {}
+  }
+  newsPage = 0;
+  renderNews();
+  setTimeout(loadNews, (failed ? CONFIG.retryMin : NEWS.refreshMin) * 60000);
+}
+
+function renderNews() {
+  if (!news.length) { $("news").innerHTML = `<div class="msg">Vijesti nisu dostupne</div>`; $("news-dots").innerHTML = ""; return; }
+  const pages = Math.ceil(news.length / NEWS.perPage);
+  newsPage %= pages;
+  const today = new Date().toDateString();
+  $("news").innerHTML = news.slice(newsPage * NEWS.perPage, (newsPage + 1) * NEWS.perPage).map(n => {
+    const d = new Date(n.date), t = n.date ? (d.toDateString() === today ? "" : d.getDate() + ". ") + pad(d.getHours()) + ":" + pad(d.getMinutes()) : "";
+    const meta = [t, n.src === "Vijesti" || !n.src ? section(n.link) : n.src].filter(Boolean).join(" · ");
+    return `<a href="${esc(n.link)}" target="_blank" rel="noopener"><div><span class="meta">${esc(meta)}</span>${esc(n.title.trim())}</div></a>`;
+  }).join("");
+  $("news-dots").innerHTML = pages > 1 ? Array.from({ length: pages }, (_, i) => `<span${i === newsPage ? ' class="on"' : ""}></span>`).join("") : "";
+}
+setInterval(() => { newsPage++; renderNews(); }, NEWS.rotateSec * 1000);
+
+// ---- Ekran da se ne gasi dok je stranica otvorena ----
+let lock = null;
+async function keepAwake() {
+  if (!("wakeLock" in navigator) || document.visibilityState !== "visible" || lock) return;
+  try { lock = await navigator.wakeLock.request("screen"); lock.addEventListener("release", () => { lock = null; }); }
+  catch (e) { console.warn("wake lock:", e); }
+}
+document.addEventListener("visibilitychange", keepAwake);
+
+document.addEventListener("dblclick", () => {
+  if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {});
+});
+
+buildDial();
+tick();
+renderNews();
+loadNews();
+renderModels();
+renderWeather();
+load();
+keepAwake();
+</script>
+</body>
+</html>
